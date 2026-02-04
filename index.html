@@ -9,17 +9,32 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
+        * { font-family: 'DM Sans', sans-serif; }
+        .glass-effect { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+    </style>
 </head>
-<body class="bg-gray-900">
-    <div id="root"></div>
+<body class="bg-gray-900 text-white">
+    <div id="root">
+        <div class="flex items-center justify-center min-h-screen">
+            <p class="text-gray-500 animate-pulse">Loading Dog's Days...</p>
+        </div>
+    </div>
 
     <script type="text/babel">
-        // Accessing React hooks and Lucide icons from the browser window
-        const { useState, useEffect } = React;
-        const { Check, Plus, X, ChevronLeft, ChevronRight, Trash2 } = lucide;
+        const { useState, useEffect, useMemo } = React;
 
         function HabitTracker() {
-            // --- YOUR LOGIC STARTS HERE ---
+            // Safety Check for Icons
+            const Icons = window.lucide || {};
+            const Check = Icons.Check || (() => <span>✓</span>);
+            const Plus = Icons.Plus || (() => <span>+</span>);
+            const X = Icons.X || (() => <span>×</span>);
+            const ChevronLeft = Icons.ChevronLeft || (() => <span>&lt;</span>);
+            const ChevronRight = Icons.ChevronRight || (() => <span>&gt;</span>);
+            const Trash2 = Icons.Trash2 || (() => <span>🗑</span>);
+
             const [habits, setHabits] = useState([]);
             const [showAddForm, setShowAddForm] = useState(false);
             const [newHabit, setNewHabit] = useState({ 
@@ -27,7 +42,6 @@
                 category: '',
                 scheduledDays: [true, true, true, true, true, true, true]
             });
-            const [currentWeekStart, setCurrentWeekStart] = useState(null);
             const [viewingWeekStart, setViewingWeekStart] = useState(null);
 
             const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -37,30 +51,19 @@
                 d.setHours(0, 0, 0, 0);
                 const day = d.getDay();
                 const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-                const monday = new Date(d.setDate(diff));
-                monday.setHours(0, 0, 0, 0);
-                return monday;
+                return new Date(d.setDate(diff));
             };
 
             useEffect(() => {
                 const monday = getMondayOfWeek(new Date());
-                setCurrentWeekStart(monday);
                 setViewingWeekStart(monday);
-                loadHabits(monday);
+                const weekKey = monday.toISOString().split('T')[0];
+                const stored = localStorage.getItem(`habits-${weekKey}`);
+                if (stored) setHabits(JSON.parse(stored));
             }, []);
 
-            const loadHabits = (weekStart) => {
-                const weekKey = weekStart.toISOString().split('T')[0];
-                const stored = localStorage.getItem(`habits-${weekKey}`);
-                if (stored) {
-                    setHabits(JSON.parse(stored));
-                } else {
-                    setHabits([]);
-                }
-            };
-
-            const saveHabits = (updatedHabits, weekStart) => {
-                const weekKey = weekStart.toISOString().split('T')[0];
+            const saveHabits = (updatedHabits) => {
+                const weekKey = viewingWeekStart.toISOString().split('T')[0];
                 localStorage.setItem(`habits-${weekKey}`, JSON.stringify(updatedHabits));
                 setHabits(updatedHabits);
             };
@@ -74,100 +77,86 @@
                     scheduledDays: newHabit.scheduledDays,
                     checks: Array(7).fill(false)
                 };
-                const updatedHabits = [...habits, habit];
-                saveHabits(updatedHabits, viewingWeekStart);
+                saveHabits([...habits, habit]);
                 setNewHabit({ name: '', category: '', scheduledDays: [true, true, true, true, true, true, true] });
                 setShowAddForm(false);
             };
 
             const toggleCheck = (habitId, dayIndex) => {
-                const updatedHabits = habits.map(habit =>
-                    habit.id === habitId
-                        ? { ...habit, checks: habit.checks.map((c, i) => i === dayIndex ? !c : c) }
-                        : habit
+                const updated = habits.map(h => h.id === habitId ? 
+                    {...h, checks: h.checks.map((c, i) => i === dayIndex ? !c : c)} : h
                 );
-                saveHabits(updatedHabits, viewingWeekStart);
+                saveHabits(updated);
             };
 
-            const deleteHabit = (habitId) => {
-                const updatedHabits = habits.filter(h => h.id !== habitId);
-                saveHabits(updatedHabits, viewingWeekStart);
-            };
+            const groupedHabits = useMemo(() => {
+                return habits.reduce((acc, habit) => {
+                    if (!acc[habit.category]) acc[habit.category] = [];
+                    acc[habit.category].push(habit);
+                    return acc;
+                }, {});
+            }, [habits]);
 
-            const navigateWeek = (direction) => {
-                const newDate = new Date(viewingWeekStart);
-                newDate.setDate(newDate.getDate() + (direction * 7));
-                setViewingWeekStart(newDate);
-                loadHabits(newDate);
-            };
-
-            if (!currentWeekStart) return null;
-
-            const isCurrentWeek = viewingWeekStart.getTime() === currentWeekStart.getTime();
-            const groupedHabits = habits.reduce((acc, habit) => {
-                if (!acc[habit.category]) acc[habit.category] = [];
-                acc[habit.category].push(habit);
-                return acc;
-            }, {});
+            if (!viewingWeekStart) return null;
 
             return (
-                <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-4 pb-20 text-white">
-                    <style>{`
-                        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
-                        * { font-family: 'DM Sans', sans-serif; }
-                        .glass-effect { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
-                    `}</style>
+                <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-4 pb-20">
                     <div className="max-w-5xl mx-auto">
                         <header className="text-center mb-8">
                             <h1 className="text-5xl font-bold mb-2">Dog's Days</h1>
-                            <p className="text-gray-400">Build your best self, one day at a time</p>
                             <div className="flex justify-center items-center gap-4 mt-6">
-                                <button onClick={() => navigateWeek(-1)} className="p-2 glass-effect rounded-full"><ChevronLeft /></button>
-                                <span className="glass-effect px-4 py-2 rounded-xl">{viewingWeekStart.toDateString()}</span>
-                                <button onClick={() => navigateWeek(1)} disabled={isCurrentWeek} className="p-2 glass-effect rounded-full disabled:opacity-30"><ChevronRight /></button>
+                                <span className="glass-effect px-4 py-2 rounded-xl">
+                                    Week of {viewingWeekStart.toLocaleDateString()}
+                                </span>
                             </div>
                         </header>
 
-                        {/* Habit Table/List */}
-                        <div className="space-y-6">
+                        <div className="space-y-8">
                             {Object.entries(groupedHabits).map(([category, items]) => (
-                                <div key={category} className="space-y-3">
-                                    <h2 className="text-xl font-bold border-l-4 border-purple-500 pl-3">{category}</h2>
+                                <div key={category} className="space-y-4">
+                                    <h2 className="text-2xl font-bold border-l-4 border-purple-500 pl-3">{category}</h2>
                                     {items.map(habit => (
-                                        <div key={habit.id} className="glass-effect p-4 rounded-2xl flex items-center justify-between">
-                                            <div className="w-1/4 font-medium">{habit.name}</div>
-                                            <div className="flex gap-2">
+                                        <div key={habit.id} className="glass-effect p-5 rounded-2xl flex items-center justify-between gap-4">
+                                            <div className="w-1/4 font-semibold text-lg">{habit.name}</div>
+                                            <div className="flex flex-1 justify-center gap-2">
                                                 {habit.checks.map((checked, i) => (
                                                     <button 
                                                         key={i}
                                                         onClick={() => habit.scheduledDays[i] && toggleCheck(habit.id, i)}
-                                                        className={`w-10 h-10 rounded-lg flex items-center justify-center ${!habit.scheduledDays[i] ? 'bg-gray-800 opacity-20' : checked ? 'bg-emerald-500' : 'bg-white/10'}`}
+                                                        className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                                                            !habit.scheduledDays[i] ? 'opacity-10 cursor-not-allowed' :
+                                                            checked ? 'bg-emerald-500 shadow-lg shadow-emerald-500/30' : 'bg-white/10 hover:bg-white/20'
+                                                        }`}
                                                     >
-                                                        {checked && <Check size={18} />}
+                                                        {checked && <Check size={20} strokeWidth={3} />}
                                                     </button>
                                                 ))}
                                             </div>
-                                            <button onClick={() => deleteHabit(habit.id)} className="text-red-400 hover:text-red-300"><Trash2 size={18}/></button>
+                                            <button onClick={() => saveHabits(habits.filter(h => h.id !== habit.id))} className="text-red-400 opacity-50 hover:opacity-100">
+                                                <Trash2 size={18}/>
+                                            </button>
                                         </div>
                                     ))}
                                 </div>
                             ))}
                         </div>
 
-                        {/* Add Form */}
-                        {isCurrentWeek && (
-                            <div className="mt-8">
-                                {!showAddForm ? (
-                                    <button onClick={() => setShowAddForm(true)} className="w-full py-4 bg-purple-600 rounded-2xl font-bold">Add New Habit</button>
-                                ) : (
-                                    <div className="glass-effect p-6 rounded-2xl space-y-4">
-                                        <input className="w-full bg-white/10 p-3 rounded-lg" placeholder="Habit name" value={newHabit.name} onChange={e => setNewHabit({...newHabit, name: e.target.value})} />
-                                        <input className="w-full bg-white/10 p-3 rounded-lg" placeholder="Category" value={newHabit.category} onChange={e => setNewHabit({...newHabit, category: e.target.value})} />
-                                        <button onClick={addHabit} className="w-full py-3 bg-emerald-600 rounded-xl font-bold">Save Habit</button>
+                        <div className="mt-8">
+                            {!showAddForm ? (
+                                <button onClick={() => setShowAddForm(true)} className="w-full py-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl font-bold text-lg shadow-lg">
+                                    + Add New Habit
+                                </button>
+                            ) : (
+                                <div className="glass-effect p-6 rounded-2xl space-y-4">
+                                    <input className="w-full bg-white/10 p-4 rounded-xl outline-none focus:ring-2 focus:ring-purple-500" placeholder="Habit name" value={newHabit.name} onChange={e => setNewHabit({...newHabit, name: e.target.value})} />
+                                    <input className="w-full bg-white/10 p-4 rounded-xl outline-none focus:ring-2 focus:ring-purple-500" placeholder="Category (e.g. Health)" value={newHabit.category} onChange={e => setNewHabit({...newHabit, category: e.target.value})} />
+                                    <div className="flex gap-2 justify-between">
+                                        <button onClick={addHabit} className="flex-1 py-4 bg-emerald-600 rounded-xl font-bold">Save Habit</button>
+                                        <button onClick={() => setShowAddForm(false)} className="px-6 py-4 bg-white/10 rounded-xl font-bold text-gray-400">Cancel</button>
                                     </div>
-                                )}
-                            </div>
-                        )}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             );
